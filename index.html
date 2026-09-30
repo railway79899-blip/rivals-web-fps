@@ -750,13 +750,9 @@ for(let i=0;i<6;i++){
 
 document.addEventListener("mousedown",e=>{
 
- if(
-  e.button===0 &&
-  controls.isLocked &&
-  gameStarted
- ){
+ if(e.button===0 && gameStarted && (controls.isLocked || !matchMedia("(pointer:fine)").matches)){
   shoot();
- }
+}
 
 });
 
@@ -1027,10 +1023,16 @@ playButton.addEventListener("click",()=>{
   updateHUD();
   camera.position.set(0,2,12);
 
-  if(typeof controls.lock==="function"){
-    controls.lock();
-  }else{
-    message("此瀏覽器不支援滑鼠鎖定");
+  // 電腦使用滑鼠鎖定；iPad/手機沒有 Pointer Lock 也要能正常進入遊戲
+  try{
+    if(typeof controls.lock==="function" && matchMedia("(pointer:fine)").matches){
+      controls.lock();
+    }else{
+      message("遊戲已開始：觸控裝置目前可進入遊戲");
+    }
+  }catch(err){
+    console.warn("Pointer Lock unavailable:",err);
+    message("遊戲已開始");
   }
 });
 
