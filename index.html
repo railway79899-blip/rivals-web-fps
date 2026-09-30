@@ -1005,3 +1005,152 @@ function damagePlayer(amount){
  if(player.hp<=0)
   defeat();
 }
+
+
+/* =====================================================
+ GAME START / HUD / LOOP / MENU FIX
+===================================================== */
+
+let gameStarted=false;
+
+const playButton=document.getElementById("playButton");
+const settingsButton=document.getElementById("settingsButton");
+const hud=document.getElementById("hud");
+const endScreen=document.getElementById("endScreen");
+
+playButton.addEventListener("click",()=>{
+  gameStarted=true;
+  menu.classList.add("hidden");
+  hud.classList.remove("hidden");
+  player.hp=100;
+  player.kills=0;
+  updateHUD();
+  camera.position.set(0,2,12);
+
+  if(typeof controls.lock==="function"){
+    controls.lock();
+  }else{
+    message("此瀏覽器不支援滑鼠鎖定");
+  }
+});
+
+settingsButton.addEventListener("click",showSettings);
+
+function showSettings(){
+  let panel=document.getElementById("settingsPanel");
+  if(!panel){
+    panel=document.createElement("div");
+    panel.id="settingsPanel";
+    panel.style.cssText="position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;color:white";
+    panel.innerHTML='<div style="width:420px;max-width:90%;padding:35px;background:#111;border:1px solid #555;text-align:center"><h1>SETTINGS</h1><p>WASD：移動　SHIFT：衝刺　SPACE：跳躍</p><p>左鍵：射擊　R：換彈　1/2/3：切換武器</p><button id="closeSettings" style="padding:12px 30px;font-size:18px">BACK</button></div>';
+    document.body.appendChild(panel);
+    document.getElementById("closeSettings").addEventListener("click",()=>panel.remove());
+  }
+}
+
+controls.addEventListener("unlock",()=>{
+  if(gameStarted) message("點 PLAY 重新進入遊戲");
+});
+
+function updateHUD(){
+  const w=weapon();
+  document.getElementById("kills").textContent=player.kills;
+  document.getElementById("healthText").textContent="HP "+Math.ceil(player.hp);
+  document.getElementById("healthFill").style.width=Math.max(0,player.hp)+"%";
+  document.getElementById("weaponName").textContent=w.name;
+  document.getElementById("ammoNumber").textContent=w.ammo;
+  document.getElementById("reserve").textContent=w.reserve;
+}
+
+let messageTimer=null;
+function message(text){
+  const el=document.getElementById("message");
+  el.textContent=text;
+  clearTimeout(messageTimer);
+  if(text) messageTimer=setTimeout(()=>el.textContent="",900);
+}
+
+let hitTimer=null;
+function hitMarker(){
+  const el=document.getElementById("hitmarker");
+  el.style.opacity="1";
+  clearTimeout(hitTimer);
+  hitTimer=setTimeout(()=>el.style.opacity="0",90);
+}
+
+function victory(){
+  gameStarted=false;
+  if(typeof controls.unlock==="function") controls.unlock();
+  hud.classList.add("hidden");
+  endScreen.classList.remove("hidden");
+  document.getElementById("endTitle").textContent="VICTORY";
+  document.getElementById("endText").textContent="你完成了本回合！";
+}
+
+function defeat(){
+  gameStarted=false;
+  if(typeof controls.unlock==="function") controls.unlock();
+  hud.classList.add("hidden");
+  endScreen.classList.remove("hidden");
+  document.getElementById("endTitle").textContent="DEFEAT";
+  document.getElementById("endText").textContent="你被擊敗了。";
+}
+
+document.getElementById("restart").addEventListener("click",()=>{
+  enemies.forEach(e=>{e.alive=false;scene.remove(e.group);});
+  enemies.length=0;
+  for(let i=0;i<6;i++){
+    const p=spawnPoints[i];
+    createEnemy(p[0],p[1]);
+  }
+  player.hp=100;
+  player.kills=0;
+  currentWeapon=0;
+  weapons[0].ammo=12; weapons[0].reserve=60;
+  weapons[1].ammo=30; weapons[1].reserve=120;
+  weapons[2].ammo=6; weapons[2].reserve=36;
+  endScreen.classList.add("hidden");
+  menu.classList.remove("hidden");
+  updateHUD();
+});
+
+window.addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+function updatePlayer(delta){
+  if(!gameStarted || !controls.isLocked)return;
+  const speed=(keys["ShiftLeft"]||keys["ShiftRight"])?player.sprint:player.speed;
+  if(keys["KeyW"])controls.moveForward(speed*delta);
+  if(keys["KeyS"])controls.moveForward(-speed*delta);
+  if(keys["KeyA"])controls.moveRight(-speed*delta);
+  if(keys["KeyD"])controls.moveRight(speed*delta);
+  player.velocityY-=20*delta;
+  camera.position.y+=player.velocityY*delta;
+  if(camera.position.y<=2){
+    camera.position.y=2;
+    player.velocityY=0;
+    player.ground=true;
+  }
+}
+
+let previousTime=performance.now();
+function animate(){
+  requestAnimationFrame(animate);
+  const now=performance.now();
+  const delta=Math.min((now-previousTime)/1000,.05);
+  previousTime=now;
+  updatePlayer(delta);
+  if(gameStarted) updateEnemies(delta);
+  renderer.render(scene,camera);
+}
+
+updateHUD();
+updateArsenalUI();
+animate();
+
+</script>
+</body>
+</html>
