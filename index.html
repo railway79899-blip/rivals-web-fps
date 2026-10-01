@@ -203,6 +203,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;fon
   <div class="subtitle">WEB FPS</div>
 
   <button class="menuButton" id="playButton">▶ PLAY</button>
+  <button class="menuButton" id="matchButton">⚔ ONLINE MATCH</button>
   <button class="menuButton" id="arsenalButton">🔫 ARSENAL</button>
   <button class="menuButton" id="settingsButton">⚙ SETTINGS</button>
 
@@ -405,6 +406,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;fon
 
 import * as THREE from
 "three";
+import {io} from "https://cdn.socket.io/4.8.1/socket.io.esm.min.js";
 
 import {PointerLockControls} from
 "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/PointerLockControls.js";
@@ -791,6 +793,7 @@ function shoot(){
 
  lastShot=now;
  w.ammo--;
+ if(onlineSocket&&onlineSocket.connected&&onlineRoom)onlineSocket.emit("player:fire",{weapon:currentWeapon});
 
  const pellets=w.pellets||1;
 
@@ -1218,9 +1221,76 @@ function animate(){
   const delta=Math.min((now-previousTime)/1000,.05);
   previousTime=now;
   updatePlayer(delta);
-  if(gameStarted) updateEnemies(delta);
+  if(onlineSocket&&onlineSocket.connected&&onlineRoom&&now-lastNetUpdate>50){
+    lastNetUpdate=now;
+    onlineSocket.emit("player:update",{x:camera.position.x,y:camera.position.y,z:camera.position.z,yaw:camera.rotation.y,pitch:camera.rotation.x,weapon:currentWeapon});
+  }
+  if(gameStarted&&!onlineRoom) updateEnemies(delta);
   renderer.render(scene,camera);
 }
+
+
+/* ================= ONLINE MULTIPLAYER ================= */
+let onlineSocket=null, onlineRoom=null, lastNetUpdate=0;
+const remotePlayers=new Map();
+const matchButton=document.getElementById("matchButton");
+function setMatchLabel(text){matchButton.textContent=text;}
+function clearRemotePlayers(){remotePlayers.forEach(v=>scene.remove(v.mesh));remotePlayers.clear();}
+function addRemotePlayer(p){
+ if(!p||p.id===onlineSocket.id)return;
+ let entry=remotePlayers.get(p.id);
+ if(!entry){
+  const mesh=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.CapsuleGeometry(.48,.95,4,8),new THREE.MeshStandardMaterial({color:0x3989ff}));
+  body.position.y=1.05;mesh.add(body);scene.add(mesh);
+  entry={mesh,name:p.name||"Player"};remotePlayers.set(p.id,entry);
+ }
+ entry.mesh.position.set(p.x||0,p.y||0,p.z||0);
+ entry.mesh.rotation.y=p.yaw||0;
+}
+matchButton.addEventListener("click",()=>{
+ if(onlineSocket&&onlineSocket.connected){
+  onlineSocket.emit("queue:leave");
+  onlineSocket.disconnect();onlineSocket=null;onlineRoom=null;
+  clearRemotePlayers();setMatchLabel("⚔ ONLINE MATCH");message("已離開線上配對");return;
+ }
+ const endpoint=prompt("輸入已部署的多人伺服器網址（例如 https://your-server.example.com）","http://localhost:3000");
+ if(!endpoint)return;
+ try{
+  onlineSocket=io(endpoint,{transports:["websocket","polling"]});
+  setMatchLabel("CONNECTING...");
+  onlineSocket.on("connect",()=>{
+   setMatchLabel("SEARCHING...");
+   onlineSocket.emit("queue:join",{name:"Player"});
+  });
+  onlineSocket.on("connect_error",()=>{
+   setMatchLabel("CONNECTION FAILED");
+   message("無法連線，請確認伺服器網址與部署狀態");
+  });
+  onlineSocket.on("queue:status",data=>setMatchLabel(data.status==="searching"?"SEARCHING...":"⚔ ONLINE MATCH"));
+  onlineSocket.on("match:found",data=>{
+   onlineRoom=data.roomId;
+   clearRemotePlayers();
+   (data.players||[]).forEach(addRemotePlayer);
+   setMatchLabel(data.status==="ready"?"MATCH READY":"WAITING...");
+  });
+  onlineSocket.on("match:ready",()=>{
+   gameStarted=true;menu.classList.add("hidden");hud.classList.remove("hidden");
+   if(isTouchDevice)mobileControls.classList.remove("hidden");
+   if(matchMedia("(pointer:fine)").matches)controls.lock();
+   message("配對成功！");
+  });
+  onlineSocket.on("player:joined",data=>addRemotePlayer(data.player));
+  onlineSocket.on("room:state",data=>(data.players||[]).forEach(addRemotePlayer));
+  onlineSocket.on("player:update",data=>addRemotePlayer(data));
+  onlineSocket.on("player:left",data=>{
+   const item=remotePlayers.get(data.id);if(item)scene.remove(item.mesh);
+   remotePlayers.delete(data.id);
+  });
+  onlineSocket.on("player:fire",()=>{});
+  onlineSocket.on("disconnect",()=>{onlineRoom=null;setMatchLabel("⚔ ONLINE MATCH");});
+ }catch(err){setMatchLabel("⚔ ONLINE MATCH");message("伺服器網址格式錯誤");}
+});
 
 updateHUD();
 updateArsenalUI();
