@@ -456,20 +456,26 @@ sun.castShadow=true;
 scene.add(sun);
 
 
-/* ARTICULATED 3D HUMANOID RIG */
+/* BONE-BASED HUMANOID RIG + PROCEDURAL ANIMATION */
 function createHumanoid(color=0x3989ff){
  const root=new THREE.Group();
  const mat=new THREE.MeshStandardMaterial({color,roughness:.72});
  const skin=new THREE.MeshStandardMaterial({color:0xe5a987,roughness:.8});
  const dark=new THREE.MeshStandardMaterial({color:0x202735,roughness:.75});
- const torso=new THREE.Mesh(new THREE.BoxGeometry(.82,1.02,.42),mat); torso.position.y=1.48; torso.castShadow=true; root.add(torso);
- const head=new THREE.Mesh(new THREE.SphereGeometry(.29,18,14),skin); head.position.y=2.23; head.castShadow=true; root.add(head);
- const neck=new THREE.Mesh(new THREE.CylinderGeometry(.12,.14,.18,10),skin); neck.position.y=2.02; root.add(neck);
- const makeLimb=(x,y,len,width,material)=>{const pivot=new THREE.Group();pivot.position.set(x,y,0);const mesh=new THREE.Mesh(new THREE.CapsuleGeometry(width,len,4,8),material);mesh.position.y=-len*.42;mesh.castShadow=true;pivot.add(mesh);root.add(pivot);return pivot;};
- const leftArm=makeLimb(-.53,1.84,.62,.13,mat), rightArm=makeLimb(.53,1.84,.62,.13,mat);
- const leftLeg=makeLimb(-.22,.98,.76,.16,dark), rightLeg=makeLimb(.22,.98,.76,.16,dark);
- const leftFoot=new THREE.Mesh(new THREE.BoxGeometry(.24,.13,.42),dark),rightFoot=leftFoot.clone();leftFoot.position.set(-.22,.12,-.08);rightFoot.position.set(.22,.12,-.08);root.add(leftFoot,rightFoot);
- return {root,torso,head,leftArm,rightArm,leftLeg,rightLeg,leftFoot,rightFoot,phase:0,move:0};
+ const bone=(name,x,y,z,parent=root)=>{const b=new THREE.Bone();b.name=name;b.position.set(x,y,z);parent.add(b);return b;};
+ const part=(geo,material,parent,x=0,y=0,z=0)=>{const m=new THREE.Mesh(geo,material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
+ const hips=bone("Hips",0,1.02,0);
+ const torso=part(new THREE.BoxGeometry(.82,1.02,.42),mat,hips,0,.46,0);
+ const chest=bone("Chest",0,.88,0,hips);
+ const neck=bone("Neck",0,.55,0,chest);
+ const head=part(new THREE.SphereGeometry(.29,18,14),skin,neck,0,.27,0);
+ part(new THREE.CylinderGeometry(.12,.14,.18,10),skin,neck,0,.04,0);
+ const makeLimb=(name,parent,x,y,len,width,material)=>{const joint=bone(name,x,y,0,parent);part(new THREE.CapsuleGeometry(width,len,4,8),material,joint,0,-len*.42,0);return joint;};
+ const leftShoulder=bone("LeftShoulder",-.53,.42,0,chest),rightShoulder=bone("RightShoulder",.53,.42,0,chest);
+ const leftArm=makeLimb("LeftArm",leftShoulder,0,0,.62,.13,mat),rightArm=makeLimb("RightArm",rightShoulder,0,0,.62,.13,mat);
+ const leftLeg=makeLimb("LeftLeg",hips,-.22,-.04,.76,.16,dark),rightLeg=makeLimb("RightLeg",hips,.22,-.04,.76,.16,dark);
+ const leftFoot=part(new THREE.BoxGeometry(.24,.13,.42),dark,leftLeg,0,-.72,-.08),rightFoot=part(new THREE.BoxGeometry(.24,.13,.42),dark,rightLeg,0,-.72,-.08);
+ return {root,torso,head,hips,chest,neck,leftArm,rightArm,leftLeg,rightLeg,leftFoot,rightFoot,phase:0,move:0};
 }
 function animateHumanoid(rig,dt,move=0,jump=0){
  rig.phase+=dt*(move>0.05?9+move*5:2);
@@ -477,7 +483,8 @@ function animateHumanoid(rig,dt,move=0,jump=0){
  rig.leftLeg.rotation.x=swing*.72;rig.rightLeg.rotation.x=-swing*.72;
  rig.leftArm.rotation.x=-swing*.55;rig.rightArm.rotation.x=swing*.55;
  rig.leftArm.rotation.z=.08;rig.rightArm.rotation.z=-.08;
- rig.torso.position.y=1.48+(move>.05?Math.abs(Math.sin(rig.phase*2))*.035:Math.sin(rig.phase)*.012);
+ rig.chest.rotation.x=move>.05?-.035:Math.sin(rig.phase)*.008;
+ rig.hips.position.y=1.02+(move>.05?Math.abs(Math.sin(rig.phase*2))*.035:Math.sin(rig.phase)*.012);
  rig.root.position.y=jump>0?.12:0;
 }
 
