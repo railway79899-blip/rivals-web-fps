@@ -1205,8 +1205,8 @@ function updatePlayer(delta){
   }else if(isTouchDevice){
     const forward=-touchMoveY*speed*delta,right=touchMoveX*speed*delta;
     const yaw=camera.rotation.y;
-    camera.position.x += Math.sin(yaw)*forward + Math.cos(yaw)*right;
-    camera.position.z += Math.cos(yaw)*forward - Math.sin(yaw)*right;
+    camera.position.x += -Math.sin(yaw)*forward + Math.cos(yaw)*right;
+    camera.position.z += -Math.cos(yaw)*forward - Math.sin(yaw)*right;
   }
   player.velocityY-=20*delta;
   camera.position.y+=player.velocityY*delta;
