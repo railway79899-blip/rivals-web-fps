@@ -456,6 +456,31 @@ sun.castShadow=true;
 scene.add(sun);
 
 
+/* ARTICULATED 3D HUMANOID RIG */
+function createHumanoid(color=0x3989ff){
+ const root=new THREE.Group();
+ const mat=new THREE.MeshStandardMaterial({color,roughness:.72});
+ const skin=new THREE.MeshStandardMaterial({color:0xe5a987,roughness:.8});
+ const dark=new THREE.MeshStandardMaterial({color:0x202735,roughness:.75});
+ const torso=new THREE.Mesh(new THREE.BoxGeometry(.82,1.02,.42),mat); torso.position.y=1.48; torso.castShadow=true; root.add(torso);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.29,18,14),skin); head.position.y=2.23; head.castShadow=true; root.add(head);
+ const neck=new THREE.Mesh(new THREE.CylinderGeometry(.12,.14,.18,10),skin); neck.position.y=2.02; root.add(neck);
+ const makeLimb=(x,y,len,width,material)=>{const pivot=new THREE.Group();pivot.position.set(x,y,0);const mesh=new THREE.Mesh(new THREE.CapsuleGeometry(width,len,4,8),material);mesh.position.y=-len*.42;mesh.castShadow=true;pivot.add(mesh);root.add(pivot);return pivot;};
+ const leftArm=makeLimb(-.53,1.84,.62,.13,mat), rightArm=makeLimb(.53,1.84,.62,.13,mat);
+ const leftLeg=makeLimb(-.22,.98,.76,.16,dark), rightLeg=makeLimb(.22,.98,.76,.16,dark);
+ const leftFoot=new THREE.Mesh(new THREE.BoxGeometry(.24,.13,.42),dark),rightFoot=leftFoot.clone();leftFoot.position.set(-.22,.12,-.08);rightFoot.position.set(.22,.12,-.08);root.add(leftFoot,rightFoot);
+ return {root,torso,head,leftArm,rightArm,leftLeg,rightLeg,leftFoot,rightFoot,phase:0,move:0};
+}
+function animateHumanoid(rig,dt,move=0,jump=0){
+ rig.phase+=dt*(move>0.05?9+move*5:2);
+ const swing=Math.sin(rig.phase)*Math.min(1,move);
+ rig.leftLeg.rotation.x=swing*.72;rig.rightLeg.rotation.x=-swing*.72;
+ rig.leftArm.rotation.x=-swing*.55;rig.rightArm.rotation.x=swing*.55;
+ rig.leftArm.rotation.z=.08;rig.rightArm.rotation.z=-.08;
+ rig.torso.position.y=1.48+(move>.05?Math.abs(Math.sin(rig.phase*2))*.035:Math.sin(rig.phase)*.012);
+ rig.root.position.y=jump>0?.12:0;
+}
+
 /* =====================================================
  PLAYER
 ===================================================== */
@@ -719,40 +744,9 @@ const spawnPoints=[
 ];
 
 function createEnemy(x,z){
-
- const group=new THREE.Group();
-
- group.position.set(x,0,z);
-
- const body=new THREE.Mesh(
-  new THREE.BoxGeometry(1.2,2,.8),
-  new THREE.MeshStandardMaterial({color:0xd63838})
- );
-
- body.position.y=1;
-
- const head=new THREE.Mesh(
-  new THREE.SphereGeometry(.45,16,16),
-  new THREE.MeshStandardMaterial({color:0xffad8c})
- );
-
- head.position.y=2.35;
-
- body.castShadow=true;
- head.castShadow=true;
-
- group.add(body,head);
- scene.add(group);
-
- enemies.push({
-  group,
-  body,
-  head,
-  hp:100,
-  speed:1.7+Math.random()*1.3,
-  cooldown:Math.random(),
-  alive:true
- });
+ const rig=createHumanoid(0xd63838);
+ rig.root.position.set(x,0,z);scene.add(rig.root);
+ enemies.push({group:rig.root,body:rig.torso,head:rig.head,rig,hp:100,speed:1.7+Math.random()*1.3,cooldown:Math.random(),alive:true});
 }
 
 for(let i=0;i<6;i++){
@@ -966,9 +960,11 @@ function updateEnemies(delta){
      e.speed*delta
     )
    );
+   animateHumanoid(e.rig,delta,1,0);
 
   }else{
 
+   animateHumanoid(e.rig,delta,0,0);
    e.cooldown-=delta;
 
    if(e.cooldown<=0){
@@ -1240,13 +1236,16 @@ function addRemotePlayer(p){
  if(!p||p.id===onlineSocket.id)return;
  let entry=remotePlayers.get(p.id);
  if(!entry){
-  const mesh=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.CapsuleGeometry(.48,.95,4,8),new THREE.MeshStandardMaterial({color:0x3989ff}));
-  body.position.y=1.05;mesh.add(body);scene.add(mesh);
-  entry={mesh,name:p.name||"Player"};remotePlayers.set(p.id,entry);
+  const rig=createHumanoid(0x3989ff);
+  const mesh=rig.root;scene.add(mesh);
+  entry={mesh,rig,name:p.name||"Player",lastX:p.x||0,lastZ:p.z||0};remotePlayers.set(p.id,entry);
  }
- entry.mesh.position.set(p.x||0,p.y||0,p.z||0);
+ const nx=p.x||0,nz=p.z||0;
+ const moved=Math.hypot(nx-entry.lastX,nz-entry.lastZ)>.015?1:0;
+ entry.mesh.position.set(nx,0,nz);
  entry.mesh.rotation.y=p.yaw||0;
+ animateHumanoid(entry.rig,1/20,moved,0);
+ entry.lastX=nx;entry.lastZ=nz;
 }
 matchButton.addEventListener("click",()=>{
  if(onlineSocket&&onlineSocket.connected){
